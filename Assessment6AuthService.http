@@ -1,0 +1,6 @@
+@Assessment6AuthService_HostAddress = http://localhost:5216
+
+GET {{Assessment6AuthService_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
