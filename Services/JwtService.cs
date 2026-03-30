@@ -2,7 +2,6 @@
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace Assessment6AuthService.Services
@@ -15,10 +14,14 @@ namespace Assessment6AuthService.Services
 
         public string GenerateToken(User user)
         {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!));
+            var key = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!));
 
-            var claims = new[]{
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),new Claim(ClaimTypes.Email, user.Email) };
+            var claims = new[]
+            {
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(ClaimTypes.Email, user.Email),
+        };
 
             var token = new JwtSecurityToken(
                 issuer: _config["Jwt:Issuer"],
@@ -30,10 +33,5 @@ namespace Assessment6AuthService.Services
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
-        public string GenerateRefreshToken()
-        {
-            return Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
-        }
-        public record RefreshDto(string RefreshToken);
     }
 }

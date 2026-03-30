@@ -9,6 +9,5 @@ namespace Assessment6AuthService.Data
 
         public DbSet<User> Users { get; set; }
         public DbSet<OtpRecord> OtpRecords { get; set; }
-        public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     }
 }
