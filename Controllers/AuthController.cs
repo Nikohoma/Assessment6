@@ -1,6 +1,7 @@
 ﻿using Assessment6AuthService.Data;
 using Assessment6AuthService.Models;
 using Assessment6AuthService.Services;
+using Azure.Core;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -62,7 +63,20 @@ namespace Assessment6AuthService.Controllers
             if (!user.IsEmailVerified)
                 return Unauthorized("Email not verified.");
 
-            return Ok(new { token = _jwt.GenerateToken(user) });
+            var refreshToken = _jwt.GenerateRefreshToken();
+
+            // Save refresh token to DB
+            _db.RefreshTokens.Add(new RefreshToken
+            {
+                UserId = user.Id,
+                Token = refreshToken,
+                ExpiresAt = DateTime.UtcNow.AddDays(7)
+            });
+            await _db.SaveChangesAsync();
+
+            return Ok(new { token = _jwt.GenerateToken(user), refreshToken });
+
+            //return Ok(new { token = _jwt.GenerateToken(user) });
         }
 
         // Passwordless login via OTP
@@ -83,10 +97,66 @@ namespace Assessment6AuthService.Controllers
                 return BadRequest("Invalid or expired OTP.");
 
             var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
-            return Ok(new { token = _jwt.GenerateToken(user!) });
-        }
-    }
+            var refreshToken = _jwt.GenerateRefreshToken();
 
+            // Save refresh token to DB
+            _db.RefreshTokens.Add(new RefreshToken
+            {
+                UserId = user.Id,
+                Token = refreshToken,
+                ExpiresAt = DateTime.UtcNow.AddDays(7)
+            });
+            await _db.SaveChangesAsync();
+            return Ok(new { token = _jwt.GenerateToken(user!),refreshToken });
+        }
+
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshDto dto)
+        {
+            var stored = await _db.RefreshTokens
+                .Include(r => r.User)
+                .FirstOrDefaultAsync(r => r.Token == dto.RefreshToken
+                                       && !r.IsRevoked
+                                       && r.ExpiresAt > DateTime.UtcNow);
+
+            if (stored == null)
+                return Unauthorized("Invalid or expired refresh token.");
+
+            // Rotate — invalidate old, issue new
+            stored.IsRevoked = true;
+
+            var newAccessToken = _jwt.GenerateToken(stored.User);
+            var newRefreshToken = _jwt.GenerateRefreshToken();
+
+            _db.RefreshTokens.Add(new RefreshToken
+            {
+                UserId = stored.UserId,
+                Token = newRefreshToken,
+                ExpiresAt = DateTime.UtcNow.AddDays(7)
+            });
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { accessToken = newAccessToken, refreshToken = newRefreshToken });
+        }
+
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout([FromBody] RefreshDto dto)
+        {
+            var token = await _db.RefreshTokens
+                .FirstOrDefaultAsync(r => r.Token == dto.RefreshToken);
+
+            if (token != null)
+            {
+                token.IsRevoked = true;
+                await _db.SaveChangesAsync();
+            }
+
+            return Ok("Logged out.");
+        }
+
+    }
+    public record RefreshDto(string RefreshToken);
     public record EmailDto(string Email);
     public record RegisterDto(string Email, string Otp, string Password);
     public record LoginDto(string Email, string Password);
